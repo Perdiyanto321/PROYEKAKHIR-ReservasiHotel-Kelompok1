@@ -56,3 +56,15 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+
+## Akun Demo (hasil `php artisan migrate:fresh --seed`)
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@svara.test` | `password` |
+| Resepsionis | `resepsionis@svara.test` | `password` |
+| Tamu | `tamu@svara.test` | `password` |
+
+Seeder juga membuat 3 tipe kamar, 11 fasilitas, 12 unit kamar (Lantai 1–3), dan 29 reservasi contoh untuk semua status
+(`pending`, `confirmed`, `checked_in`, `checked_out`, `cancelled`). Jalankan `php artisan storage:link` sekali agar foto tipe kamar tampil.

@@ -121,6 +121,13 @@
                     </svg>
                     <span>Unit & Status Kamar</span>
                 </a>
+                <a href="{{ route('reports.index') }}"
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg transition whitespace-nowrap {{ request()->routeIs('reports.*') ? 'bg-amber-800 text-white font-medium' : 'text-stone-300 hover:bg-stone-800/70 hover:text-white' }}">
+                    <svg class="w-[17px] h-[17px] shrink-0 opacity-85" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    <span>Laporan Operasional</span>
+                </a>
             @endcan
 
             @can('kelola-master-kamar')
@@ -133,6 +140,23 @@
                         <path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/>
                     </svg>
                     <span>Tipe Kamar & Tarif</span>
+                </a>
+                <a href="{{ route('facilities.index') }}"
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg transition whitespace-nowrap {{ request()->routeIs('facilities.*') ? 'bg-amber-800 text-white font-medium' : 'text-stone-300 hover:bg-stone-800/70 hover:text-white' }}">
+                    <svg class="w-[17px] h-[17px] shrink-0 opacity-85" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>Master Fasilitas</span>
+                </a>
+            @endcan
+
+            @can('kelola-pengguna')
+                <a href="{{ route('users.index') }}"
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg transition whitespace-nowrap {{ request()->routeIs('users.*') ? 'bg-amber-800 text-white font-medium' : 'text-stone-300 hover:bg-stone-800/70 hover:text-white' }}">
+                    <svg class="w-[17px] h-[17px] shrink-0 opacity-85" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    <span>Manajemen Pengguna</span>
                 </a>
             @endcan
 
