@@ -17,13 +17,47 @@ class ReservationController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        $isGuest = $user->hasRole('tamu');
 
-        $reservations = Reservation::with(['user', 'room.roomType'])
-            ->when($user->hasRole('tamu'), fn ($q) => $q->where('user_id', $user->id))
+        $baseQuery = Reservation::query()
+            ->when($isGuest, fn ($q) => $q->where('user_id', $user->id));
+
+        // Hitung jumlah transaksi per status untuk tab navigasi
+        $rawCounts = (clone $baseQuery)
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $statusCounts = [
+            'all' => $rawCounts->sum(),
+            'pending' => $rawCounts->get('pending', 0),
+            'confirmed' => $rawCounts->get('confirmed', 0),
+            'checked_in' => $rawCounts->get('checked_in', 0),
+            'checked_out' => $rawCounts->get('checked_out', 0),
+            'cancelled' => $rawCounts->get('cancelled', 0),
+        ];
+
+        // Ringkasan aktivitas harian front desk
+        $pulse = [
+            'pending' => $statusCounts['pending'],
+            'today_check_in' => (clone $baseQuery)
+                ->whereDate('check_in_date', today())
+                ->whereIn('status', ['pending', 'confirmed'])
+                ->count(),
+            'in_house' => $statusCounts['checked_in'],
+            'today_check_out' => (clone $baseQuery)
+                ->whereDate('check_out_date', today())
+                ->where('status', 'checked_in')
+                ->count(),
+        ];
+
+        $reservations = (clone $baseQuery)
+            ->with(['user', 'room.roomType', 'review'])
             ->when($request->filled('cari'), function ($query) use ($request) {
                 $query->where(function ($q) use ($request) {
                     $q->where('booking_code', 'like', '%' . $request->cari . '%')
-                      ->orWhereHas('user', fn ($u) => $u->where('name', 'like', '%' . $request->cari . '%'));
+                      ->orWhereHas('user', fn ($u) => $u->where('name', 'like', '%' . $request->cari . '%'))
+                      ->orWhereHas('room', fn ($r) => $r->where('room_number', 'like', '%' . $request->cari . '%'));
                 });
             })
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
@@ -31,7 +65,7 @@ class ReservationController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        return view('reservations.index', compact('reservations'));
+        return view('reservations.index', compact('reservations', 'statusCounts', 'pulse', 'isGuest'));
     }
 
     public function create(Request $request)
@@ -70,7 +104,7 @@ class ReservationController extends Controller
             'special_requests' => $validated['special_requests'] ?? null,
         ]);
 
-        // Modul 6: Tetapkan pemilik dari user terautentikasi, bukan dari input mass assignment
+        // Tetapkan pemilik dari user terautentikasi, bukan dari input mass assignment
         $reservation->user_id = $ownerId;
         $reservation->save();
 
@@ -104,7 +138,7 @@ class ReservationController extends Controller
             }
         });
 
-        return back()->with('success', 'Status reservasi berhasil diperbarui menjadi ' . strtoupper($data['status']) . '.');
+        return back()->with('success', 'Status reservasi ' . $reservation->booking_code . ' diperbarui menjadi ' . strtoupper($data['status']) . '.');
     }
 
     public function cancel(Reservation $reservation)

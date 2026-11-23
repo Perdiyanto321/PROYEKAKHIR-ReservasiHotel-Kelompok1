@@ -16,8 +16,17 @@ Route::get('/', function () {
 });
 
 Route::get('/explore', function () {
+    $roomTypes = RoomType::with([
+            'facilities',
+            'rooms' => fn ($q) =>$q->tersedia()->orderBy('room_number'),
+        ])
+        ->withCount(['rooms' => fn ($q) =>$q->tersedia()])
+        ->orderBy('base_price')
+        ->get()
+        ->each->append('cover_url');
+
     return Inertia::render('Explore', [
-        'roomTypes' => RoomType::with('facilities')->withCount(['rooms' => fn ($q) => $q->tersedia()])->get(),
+        'roomTypes' => $roomTypes,
     ]);
 })->name('explore');
 
