@@ -196,6 +196,13 @@
 
             <!-- Aksi Transisi Status untuk Staf -->
             <div class="flex flex-wrap items-center gap-2.5 ml-auto">
+                @if(in_array($reservation->status, ['pending', 'confirmed'], true))
+                    <a href="{{ route('reservations.edit', $reservation) }}"
+                       class="px-4 py-2 rounded-lg border border-stone-300 bg-white text-xs font-semibold text-stone-700 hover:bg-stone-100 transition">
+                        Edit Reservasi
+                    </a>
+                @endif
+
                 @can('update', $reservation)
                     @if(in_array($reservation->status, ['pending', 'confirmed'], true))
                         <form action="{{ route('reservations.status', $reservation) }}" method="POST"

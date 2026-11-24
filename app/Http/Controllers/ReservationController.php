@@ -204,6 +204,108 @@ class ReservationController extends Controller
         return view('reservations.show', compact('reservation'));
     }
 
+    public function edit(Reservation $reservation)
+    {
+        Gate::authorize('view', $reservation);
+
+        // Hanya reservasi yang belum selesai/dibatalkan yang bisa diubah
+        if (!in_array($reservation->status, ['pending', 'confirmed'], true)) {
+            return redirect()
+                ->route('reservations.show', $reservation)
+                ->with('error', 'Reservasi yang sudah check-in, selesai, atau dibatalkan tidak dapat diubah.');
+        }
+
+        // Ambil kamar yang tersedia + kamar yang sedang dipakai reservasi ini
+        $rooms = Room::with(['roomType.facilities'])
+            ->where(function ($q) use ($reservation) {
+                $q->where('status', 'tersedia')
+                  ->orWhere('id', $reservation->room_id);
+            })
+            ->orderBy('room_number')
+            ->get();
+
+        $guests = Auth::user()->hasAnyRole(['admin', 'resepsionis'])
+            ? User::orderBy('name')->get(['id', 'name', 'email'])
+            : collect();
+
+        return view('reservations.edit', compact('reservation', 'rooms', 'guests'));
+    }
+
+    public function update(Request $request, Reservation $reservation)
+    {
+        Gate::authorize('view', $reservation);
+
+        if (!in_array($reservation->status, ['pending', 'confirmed'], true)) {
+            return redirect()
+                ->route('reservations.show', $reservation)
+                ->with('error', 'Reservasi yang sudah check-in, selesai, atau dibatalkan tidak dapat diubah.');
+        }
+
+        $validated = $request->validate([
+            'room_id' => ['required', 'exists:rooms,id'],
+            'user_id' => ['nullable', 'exists:users,id'],
+            'check_in_date' => ['required', 'date'],
+            'check_out_date' => ['required', 'date', 'after:check_in_date'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'room_id.required' => 'Silakan pilih unit kamar terlebih dahulu.',
+            'check_out_date.after' => 'Tanggal check-out harus minimal 1 hari setelah tanggal check-in.',
+        ]);
+
+        // Cek bentrok jadwal kamar (kecualikan ID reservasi yang sedang diedit)
+        $isConflict = Reservation::where('room_id', $validated['room_id'])
+            ->where('id', '!=', $reservation->id)
+            ->whereIn('status', ['pending', 'confirmed', 'checked_in'])
+            ->where(function ($query) use ($validated) {
+                $query->where('check_in_date', '<', $validated['check_out_date'])
+                    ->where('check_out_date', '>', $validated['check_in_date']);
+            })
+            ->exists();
+
+        if ($isConflict) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'room_id' => 'Unit kamar ini sudah dipesan pada rentang tanggal tersebut. Silakan pilih tanggal atau kamar lain.',
+                ]);
+        }
+
+        $room = Room::with('roomType')->findOrFail($validated['room_id']);
+        $nights = Carbon::parse($validated['check_in_date'])
+            ->diffInDays(Carbon::parse($validated['check_out_date']));
+        $totalPrice = $nights * ($room->roomType->base_price ?? 0);
+
+        $data = [
+            'room_id' => $room->id,
+            'check_in_date' => $validated['check_in_date'],
+            'check_out_date' => $validated['check_out_date'],
+        ];
+
+        if (Auth::user()->hasAnyRole(['admin', 'resepsionis']) && !empty($validated['user_id'])) {
+            $data['user_id'] = $validated['user_id'];
+        }
+
+        if (Schema::hasColumn('reservations', 'total_nights')) {
+            $data['total_nights'] = $nights;
+        }
+
+        if (Schema::hasColumn('reservations', 'total_price')) {
+            $data['total_price'] = $totalPrice;
+        }
+
+        if (Schema::hasColumn('reservations', 'notes')) {
+            $data['notes'] = $validated['notes'] ?? null;
+        } elseif (Schema::hasColumn('reservations', 'special_requests')) {
+            $data['special_requests'] = $validated['notes'] ?? null;
+        }
+
+        $reservation->update($data);
+
+        return redirect()
+            ->route('reservations.show', $reservation)
+            ->with('success', 'Perubahan reservasi ' . $reservation->booking_code . ' berhasil disimpan.');
+    }
+
     public function updateStatus(Request $request, Reservation $reservation)
     {
         Gate::authorize('update', $reservation);

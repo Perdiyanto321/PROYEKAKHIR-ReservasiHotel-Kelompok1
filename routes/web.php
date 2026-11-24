@@ -56,7 +56,7 @@ Route::middleware('auth')->group(function () {
 
     // 3. Reservasi (Semua role terautentikasi, pembatasan objek via ReservationPolicy)
     Route::resource('reservations', ReservationController::class)
-        ->only(['index', 'create', 'store', 'show', 'destroy']);
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
 
     Route::patch('/reservations/{reservation}/status', [ReservationController::class, 'updateStatus'])
         ->name('reservations.status');
