@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -12,12 +11,16 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Seed the application's database.
+     *
+     * Urutan penting: role & akun → master hotel (fasilitas, tipe, kamar) → reservasi demo.
+     * Jalankan `php artisan migrate:fresh --seed` untuk memulai dari data demo yang bersih.
      */
     public function run(): void
     {
         $this->call([
             RolePermissionSeeder::class,
             HotelSeeder::class,
+            DemoReservationSeeder::class,
         ]);
     }
 }

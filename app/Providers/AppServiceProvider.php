@@ -28,5 +28,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('operasional-frontdesk', function (User $user): bool {
             return $user->hasAnyRole(['admin', 'resepsionis']);
         });
+
+        // Manajemen akun pengguna: khusus admin
+        Gate::define('kelola-pengguna', function (User $user): bool {
+            return $user->hasRole('admin');
+        });
     }
 }

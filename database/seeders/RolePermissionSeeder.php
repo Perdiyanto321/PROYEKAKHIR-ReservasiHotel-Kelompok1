@@ -35,29 +35,23 @@ class RolePermissionSeeder extends Seeder
         $tamuRole = Role::firstOrCreate(['name' => 'tamu', 'guard_name' => 'web']);
         $tamuRole->syncPermissions(['buat-reservasi']);
 
-        // Akun Uji Tiap Role
-        $admin = User::firstOrCreate(
-            ['email' => 'admin@hotel.test'],
-            ['name' => 'Operations Manager', 'phone' => '081234567890', 'password' => Hash::make('password')]
-        );
-        $admin->assignRole($adminRole);
+        // Akun demo siap presentasi (password semuanya: password)
+        $accounts = [
+            ['admin@svara.test',       'Operations Manager', '081234567890', $adminRole],
+            ['resepsionis@svara.test', 'Front Desk Staff',   '081234567891', $resepsionisRole],
+            ['tamu@svara.test',        'Raka Pratama',       '081234567892', $tamuRole],
+            ['tamu2@svara.test',       'Nadia Kusuma',       '081234567893', $tamuRole],
+            ['tamu3@svara.test',       'Dewi Anggraini',     '081234567894', $tamuRole],
+            ['tamu4@svara.test',       'Budi Santoso',       '081234567895', $tamuRole],
+            ['tamu5@svara.test',       'Maya Lestari',       '081234567896', $tamuRole],
+        ];
 
-        $resepsionis = User::firstOrCreate(
-            ['email' => 'resepsionis@hotel.test'],
-            ['name' => 'Front Desk Staff', 'phone' => '081234567891', 'password' => Hash::make('password')]
-        );
-        $resepsionis->assignRole($resepsionisRole);
-
-        $tamu1 = User::firstOrCreate(
-            ['email' => 'tamu@hotel.test'],
-            ['name' => 'Raka Pratama', 'phone' => '081234567892', 'password' => Hash::make('password')]
-        );
-        $tamu1->assignRole($tamuRole);
-
-        $tamu2 = User::firstOrCreate(
-            ['email' => 'tamu2@hotel.test'],
-            ['name' => 'Nadia Kusuma', 'phone' => '081234567893', 'password' => Hash::make('password')]
-        );
-        $tamu2->assignRole($tamuRole);
+        foreach ($accounts as [$email, $name, $phone, $role]) {
+            $user = User::firstOrCreate(
+                ['email' => $email],
+                ['name' => $name, 'phone' => $phone, 'password' => Hash::make('password')]
+            );
+            $user->syncRoles([$role]);
+        }
     }
 }

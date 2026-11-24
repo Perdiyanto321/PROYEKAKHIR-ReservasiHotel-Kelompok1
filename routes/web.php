@@ -1,10 +1,13 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomTypeController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use App\Models\RoomType;
 use Inertia\Inertia;
@@ -60,6 +63,24 @@ Route::middleware('auth')->group(function () {
 
     Route::patch('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])
         ->name('reservations.cancel');
+
+    // 4. Master Fasilitas Kamar (Hanya Admin via Gate)
+    Route::resource('facilities', FacilityController::class)
+        ->only(['index', 'store', 'update', 'destroy'])
+        ->middleware('can:kelola-master-kamar');
+
+    // 5. Manajemen Akun Pengguna (Hanya Admin via Gate)
+    Route::middleware('can:kelola-pengguna')->group(function () {
+        Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::post('/users', [UserController::class, 'store'])->name('users.store');
+        Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.role');
+    });
+
+    // 6. Laporan Pendapatan & Okupansi (Admin & Resepsionis via Gate)
+    Route::middleware('can:operasional-frontdesk')->group(function () {
+        Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
+    });
 
 });
 
