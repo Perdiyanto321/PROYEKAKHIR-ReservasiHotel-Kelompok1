@@ -4,33 +4,69 @@
 
 @section('content')
 @if($isGuest)
+    @php
+        $guestActiveCount = $myReservations->whereIn('status', ['pending', 'confirmed', 'checked_in'])->count();
+        $guestCompletedCount = $myReservations->where('status', 'checked_out')->count();
+        $activeStay = $myReservations->firstWhere('status', 'checked_in')
+            ?? $myReservations->whereIn('status', ['confirmed', 'pending'])->sortBy('check_in_date')->first();
+    @endphp
+
     <!-- Editorial Hero Banner untuk Tamu -->
-    <div class="bg-[#181512] text-stone-100 rounded-2xl p-7 sm:p-8 mb-7 border border-stone-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+    <div class="bg-[#181512] text-stone-100 rounded-2xl p-7 sm:p-8 mb-6 border border-stone-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
         <div class="max-w-xl">
             <span class="inline-block text-[11px] uppercase tracking-[0.2em] text-amber-400 font-semibold">Svara Guest Sanctuary</span>
             <h2 class="font-editorial text-3xl sm:text-4xl text-amber-50 mt-2 leading-tight">
                 Selamat datang kembali, {{ auth()->user()->name }}.
             </h2>
             <p class="text-sm text-stone-300 mt-2 leading-relaxed">
-                Nikmati ketenangan menginap dengan standar pelayanan personal. Pantau jadwal reservasi Anda atau jelajahi pilihan suite terbaru kami.
+                Nikmati ketenangan menginap dengan standar pelayanan personal. Pantau jadwal reservasi Anda, cetak bukti pemesanan, atau jelajahi pilihan suite terbaru kami.
             </p>
         </div>
         <div class="flex flex-wrap items-center gap-3 shrink-0">
             <a href="{{ route('explore') }}" class="px-4 py-2.5 rounded-lg border border-stone-700 text-stone-200 text-sm font-medium hover:bg-stone-800 transition">
-                Jelajahi Katalog Kamar
+                Jelajahi Katalog Suites
             </a>
             <a href="{{ route('reservations.create') }}" class="px-5 py-2.5 rounded-lg bg-amber-800 text-white text-sm font-medium hover:bg-amber-700 transition">
-                Pesan Kamar Sekarang
+                Buat Reservasi Baru
             </a>
         </div>
     </div>
 
+    <!-- Ringkasan Reservasi Aktif Tamu -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <x-stat-card title="Reservasi Aktif" value="{{ $guestActiveCount }} Pesanan" subtitle="Menunggu, terkonfirmasi, atau in-house">
+            <x-slot:icon>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+                </svg>
+            </x-slot:icon>
+        </x-stat-card>
+
+        <x-stat-card title="Jadwal Terdekat"
+                     value="{{ $activeStay ? $activeStay->check_in_date->format('d M Y') : 'Belum Ada' }}"
+                     subtitle="{{ $activeStay ? 'Kamar ' . $activeStay->room->room_number . ' (' . $activeStay->booking_code . ')' : 'Silakan pilih suite di katalog' }}">
+            <x-slot:icon>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+            </x-slot:icon>
+        </x-stat-card>
+
+        <x-stat-card title="Riwayat Selesai" value="{{ $guestCompletedCount }} Kunjungan" subtitle="Total pengalaman menginap selesai">
+            <x-slot:icon>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </x-slot:icon>
+        </x-stat-card>
+    </div>
+
     <!-- Riwayat Reservasi Tamu -->
-    <div class="bg-white border border-stone-200 rounded-xl overflow-hidden">
+    <div class="bg-white border border-stone-200 rounded-2xl overflow-hidden">
         <div class="px-6 py-4 border-b border-stone-200 flex items-center justify-between gap-4">
             <div>
                 <h3 class="font-semibold text-stone-900">Reservasi Terakhir Anda</h3>
-                <p class="text-xs text-stone-500 mt-0.5">Klik detail untuk melihat kode booking atau membatalkan jadwal yang belum check-in.</p>
+                <p class="text-xs text-stone-500 mt-0.5">Klik detail untuk mengelola pesanan atau cetak bukti reservasi (invoice).</p>
             </div>
             <a href="{{ route('reservations.index') }}"
                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50/70 text-xs font-semibold text-stone-700 hover:bg-stone-100 hover:border-stone-300 hover:text-stone-900 transition whitespace-nowrap">
@@ -66,17 +102,27 @@
                             </td>
                             <td class="px-6 py-4 font-semibold text-stone-900 tabular-nums whitespace-nowrap">Rp {{ number_format($rsv->total_price, 0, ',', '.') }}</td>
                             <td class="px-6 py-4"><x-status-badge :status="$rsv->status" /></td>
-                            <td class="px-6 py-4 text-right">
-                                <a href="{{ route('reservations.show', $rsv) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-medium text-stone-700 hover:bg-stone-100 transition">
-                                    Detail
-                                </a>
+                            <td class="px-6 py-4 text-right whitespace-nowrap">
+                                <div class="inline-flex items-center gap-2">
+                                    <a href="{{ route('reservations.invoice', $rsv) }}" target="_blank"
+                                       class="inline-flex items-center px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50/80 text-xs font-medium text-stone-700 hover:bg-stone-100 transition">
+                                        Invoice
+                                    </a>
+                                    <a href="{{ route('reservations.show', $rsv) }}"
+                                       class="inline-flex items-center px-3 py-1.5 rounded-lg bg-[#181512] text-xs font-medium text-amber-50 hover:bg-stone-800 transition">
+                                        Detail
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
                             <td colspan="6" class="px-6 py-10 text-center">
                                 <p class="text-sm font-medium text-stone-700">Anda belum memiliki riwayat reservasi.</p>
-                                <p class="text-xs text-stone-500 mt-1">Mulai rencanakan pengalaman menginap Anda bersama Svara Hotel.</p>
+                                <p class="text-xs text-stone-500 mt-1 mb-4">Mulai rencanakan pengalaman menginap Anda bersama Svara Hotel.</p>
+                                <a href="{{ route('explore') }}" class="inline-flex items-center px-4 py-2 rounded-lg bg-[#181512] text-amber-50 text-xs font-semibold hover:bg-stone-800 transition">
+                                    Lihat Katalog Suites
+                                </a>
                             </td>
                         </tr>
                     @endforelse
