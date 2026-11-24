@@ -203,6 +203,13 @@ class ReservationController extends Controller
 
         return view('reservations.show', compact('reservation'));
     }
+    public function invoice(Reservation $reservation)
+    {
+        Gate::authorize('view', $reservation);
+        $reservation->load(['user', 'room.roomType.facilities']);
+
+        return view('reservations.invoice', compact('reservation'));
+    }
 
     public function edit(Reservation $reservation)
     {

@@ -64,6 +64,9 @@ Route::middleware('auth')->group(function () {
     Route::patch('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])
         ->name('reservations.cancel');
 
+    Route::get('/reservations/{reservation}/invoice', [ReservationController::class, 'invoice'])
+        ->name('reservations.invoice');
+
     // 4. Master Fasilitas Kamar (Hanya Admin via Gate)
     Route::resource('facilities', FacilityController::class)
         ->only(['index', 'store', 'update', 'destroy'])
