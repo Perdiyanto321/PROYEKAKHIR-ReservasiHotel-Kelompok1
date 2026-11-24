@@ -10,6 +10,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class ReservationController extends Controller
@@ -70,46 +72,128 @@ class ReservationController extends Controller
 
     public function create(Request $request)
     {
-        $rooms = Room::tersedia()->with('roomType')->orderBy('room_number')->get();
-        $guests = $request->user()->hasAnyRole(['admin', 'resepsionis'])
-            ? User::role('tamu')->orderBy('name')->get()
+        $rooms = Room::with(['roomType.facilities'])
+            ->where('status', 'tersedia')
+            ->orderBy('room_number')
+            ->get();
+
+        $today = Carbon::today();
+        $defaultCheckIn = $today->toDateString();
+
+        if ($request->filled('check_in_date')) {
+            try {
+                $parsedIn = Carbon::parse($request->query('check_in_date'))->startOfDay();
+                if ($parsedIn->gte($today)) {
+                    $defaultCheckIn = $parsedIn->toDateString();
+                }
+            } catch (\Exception $e) {
+                // Gunakan default hari ini jika format tanggal tidak valid
+            }
+        }
+
+        $minCheckOut = Carbon::parse($defaultCheckIn)->addDay()->toDateString();
+        $defaultCheckOut = $minCheckOut;
+
+        if ($request->filled('check_out_date')) {
+            try {
+                $parsedOut = Carbon::parse($request->query('check_out_date'))->startOfDay();
+                if ($parsedOut->gt(Carbon::parse($defaultCheckIn))) {
+                    $defaultCheckOut = $parsedOut->toDateString();
+                }
+            } catch (\Exception $e) {
+                // Gunakan default H+1 jika format tanggal tidak valid
+            }
+        }
+
+        $selectedRoomId = $request->query('room_id');
+        if (!$selectedRoomId || !$rooms->contains('id', (int) $selectedRoomId)) {
+            $selectedRoomId = $rooms->first()?->id;
+        }
+
+        $guests = in_array(Auth::user()->role ?? '', ['admin', 'resepsionis'])
+            ? User::orderBy('name')->get(['id', 'name', 'email', 'role'])
             : collect();
 
-        return view('reservations.create', compact('rooms', 'guests'));
+        return view('reservations.create', [
+            'rooms' => $rooms,
+            'guests' => $guests,
+            'selectedRoomId' => $selectedRoomId,
+            'defaultCheckIn' => $defaultCheckIn,
+            'defaultCheckOut' => $defaultCheckOut,
+        ]);
     }
 
-    public function store(StoreReservationRequest $request)
+    public function store(Request $request)
     {
-        $validated = $request->validated();
-        $room = Room::with('roomType')->findOrFail($validated['room_id']);
-
-        $checkIn = Carbon::parse($validated['check_in_date']);
-        $checkOut = Carbon::parse($validated['check_out_date']);
-        $nights = max(1, $checkIn->diffInDays($checkOut));
-        $totalPrice = $nights * $room->roomType->base_price;
-
-        $isStaff = $request->user()->hasAnyRole(['admin', 'resepsionis']);
-        $ownerId = ($isStaff && ! empty($validated['guest_id']))
-            ? $validated['guest_id']
-            : $request->user()->id;
-
-        $reservation = new Reservation([
-            'booking_code' => 'RSV-' . now()->format('Ymd') . '-' . strtoupper(Str::random(4)),
-            'room_id' => $room->id,
-            'check_in_date' => $checkIn->toDateString(),
-            'check_out_date' => $checkOut->toDateString(),
-            'total_nights' => $nights,
-            'total_price' => $totalPrice,
-            'status' => $isStaff ? 'confirmed' : 'pending',
-            'special_requests' => $validated['special_requests'] ?? null,
+        $validated = $request->validate([
+            'room_id' => ['required', 'exists:rooms,id'],
+            'user_id' => ['nullable', 'exists:users,id'],
+            'check_in_date' => ['required', 'date', 'after_or_equal:today'],
+            'check_out_date' => ['required', 'date', 'after:check_in_date'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'room_id.required' => 'Silakan pilih unit kamar terlebih dahulu.',
+            'check_in_date.after_or_equal' => 'Tanggal check-in tidak boleh sebelum hari ini.',
+            'check_out_date.after' => 'Tanggal check-out harus minimal 1 hari setelah tanggal check-in.',
         ]);
 
-        // Tetapkan pemilik dari user terautentikasi, bukan dari input mass assignment
-        $reservation->user_id = $ownerId;
-        $reservation->save();
+        // Cek bentrok jadwal kamar pada rentang tanggal yang dipilih
+        $isConflict = Reservation::where('room_id', $validated['room_id'])
+            ->whereIn('status', ['pending', 'confirmed', 'checked_in'])
+            ->where(function ($query) use ($validated) {
+                $query->where('check_in_date', '<', $validated['check_out_date'])
+                    ->where('check_out_date', '>', $validated['check_in_date']);
+            })
+            ->exists();
 
-        return redirect()->route('reservations.show', $reservation)
-            ->with('success', 'Reservasi berhasil dibuat dengan kode ' . $reservation->booking_code);
+        if ($isConflict) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'room_id' => 'Unit kamar ini sudah dipesan pada rentang tanggal tersebut. Silakan pilih tanggal atau kamar lain.',
+                ]);
+        }
+
+        $room = Room::with('roomType')->findOrFail($validated['room_id']);
+        $nights = Carbon::parse($validated['check_in_date'])
+            ->diffInDays(Carbon::parse($validated['check_out_date']));
+        $totalPrice = $nights * ($room->roomType->base_price ?? 0);
+
+        $userId = in_array(Auth::user()->role ?? '', ['admin', 'resepsionis']) && !empty($validated['user_id'])
+            ? $validated['user_id']
+            : Auth::id();
+
+        $data = [
+            'user_id' => $userId,
+            'room_id' => $room->id,
+            'check_in_date' => $validated['check_in_date'],
+            'check_out_date' => $validated['check_out_date'],
+            'status' => in_array(Auth::user()->role ?? '', ['admin', 'resepsionis']) ? 'confirmed' : 'pending',
+        ];
+
+        if (Schema::hasColumn('reservations', 'total_nights')) {
+            $data['total_nights'] = $nights;
+        }
+
+        if (Schema::hasColumn('reservations', 'total_price')) {
+            $data['total_price'] = $totalPrice;
+        }
+
+        if (Schema::hasColumn('reservations', 'booking_code')) {
+            $data['booking_code'] = 'RSV-' . strtoupper(Str::random(6));
+        }
+
+        if (Schema::hasColumn('reservations', 'notes')) {
+            $data['notes'] = $validated['notes'] ?? null;
+        } elseif (Schema::hasColumn('reservations', 'special_requests')) {
+            $data['special_requests'] = $validated['notes'] ?? null;
+        }
+
+        $reservation = Reservation::create($data);
+
+        return redirect()
+            ->route('reservations.show', $reservation)
+            ->with('success', 'Reservasi kamar berhasil dibuat.');
     }
 
     public function show(Reservation $reservation)
